@@ -1,5 +1,0 @@
-/Users/applessd/Kids-Motion-Exercise/.utmp/RelWithDebInfo/6u3n696d/arm64-v8a/CMakeFiles/edit_cache.dir
-/Users/applessd/Kids-Motion-Exercise/.utmp/RelWithDebInfo/6u3n696d/arm64-v8a/CMakeFiles/rebuild_cache.dir
-/Users/applessd/Kids-Motion-Exercise/.utmp/RelWithDebInfo/6u3n696d/arm64-v8a/GameActivity/CMakeFiles/game.dir
-/Users/applessd/Kids-Motion-Exercise/.utmp/RelWithDebInfo/6u3n696d/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
-/Users/applessd/Kids-Motion-Exercise/.utmp/RelWithDebInfo/6u3n696d/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
