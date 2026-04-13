@@ -13,6 +13,10 @@
 # Unity temp build files
 .utmp/
 
+# IL2CPP backup folders (don't ship these)
+v1_BackUpThisFolder_ButDontShipItWithYourGame/
+v2_BackUpThisFolder_ButDontShipItWithYourGame/
+
 # MemoryCaptures can get excessive in size.
 # They also could contain extremely sensitive data
 /[Mm]emoryCaptures/
