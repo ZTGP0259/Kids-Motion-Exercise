@@ -611,7 +611,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a78cfb8340654c19a755f10d72e6f38, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseDetectionManager
-  cameraDisplay: {fileID: 0}
+  cameraDisplay: {fileID: 2090257007}
 --- !u!4 &880119643
 Transform:
   m_ObjectHideFlags: 0

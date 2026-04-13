@@ -32,6 +32,10 @@ public class PoseDetectionManager : MonoBehaviour
     public Vector3 LeftHip        { get; private set; }
     public Vector3 RightHip       { get; private set; }
 
+    // Expose camera texture so other scripts (e.g. CalibrationManager) can display it
+    public WebCamTexture CameraTexture => _webcamTexture;
+    public bool IsReady => _isReady;
+
     private WebCamTexture _webcamTexture;
     private PoseLandmarker _poseLandmarker;
     private Texture2D _inputTexture;
@@ -48,24 +52,31 @@ public class PoseDetectionManager : MonoBehaviour
             yield break;
         }
 
-        // Find the back-facing camera
-        WebCamDevice? backCam = null;
+        // Find the front-facing camera
+        WebCamDevice? frontCam = null;
         foreach (var device in WebCamTexture.devices)
         {
-            if (!device.isFrontFacing)
+            if (device.isFrontFacing)
             {
-                backCam = device;
+                frontCam = device;
                 break;
             }
         }
 
-        if (backCam == null)
+        // Fallback to any camera if no front cam found
+        if (frontCam == null && WebCamTexture.devices.Length > 0)
         {
-            Debug.LogError("[PoseDetectionManager] No back camera found.");
+            frontCam = WebCamTexture.devices[0];
+            Debug.LogWarning("[PoseDetectionManager] No front camera found, using default.");
+        }
+
+        if (frontCam == null)
+        {
+            Debug.LogError("[PoseDetectionManager] No camera found.");
             yield break;
         }
 
-        _webcamTexture = new WebCamTexture(backCam.Value.name, 640, 480, 30);
+        _webcamTexture = new WebCamTexture(frontCam.Value.name, 640, 480, 30);
         _webcamTexture.Play();
 
         // Wait until the camera produces real frames

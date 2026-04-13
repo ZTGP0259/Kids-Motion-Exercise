@@ -5,30 +5,27 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Manages the CalibrateScreen scene.
-/// Wires up camera feed, monitors MediaPipe landmark visibility,
-/// turns calibration dots green, and transitions to GameScene on success.
+/// Uses PoseDetectionManager for both camera feed and landmark visibility.
 /// </summary>
 public class CalibrationManager : MonoBehaviour
 {
     [Header("References — assign in Inspector")]
-    public RawImage cameraBackground;       // Full-screen RawImage (bottom layer)
-    public Image headDot;                   // Calibration dot: nose/head
-    public Image leftWristDot;             // Calibration dot: left wrist
-    public Image rightWristDot;            // Calibration dot: right wrist
-    public Text instructionText;           // Bottom instruction label
-    public AudioSource successAudio;       // AudioSource with success clip assigned
-    public PoseDetectionManager poseManager; // Drag PoseManager GameObject here
+    public RawImage cameraBackground;
+    public Image headDot;
+    public Image leftWristDot;
+    public Image rightWristDot;
+    public Text instructionText;
+    public AudioSource successAudio;
+    public PoseDetectionManager poseManager;
 
     [Header("Settings")]
     public float visibilityThreshold = 0.7f;
     public float holdDurationSeconds  = 1.5f;
     public string nextSceneName       = "GameScene";
 
-    // ── Colours ──
     private static readonly Color Red   = new Color(0.9f, 0.15f, 0.15f, 1f);
     private static readonly Color Green = new Color(0.15f, 0.85f, 0.25f, 1f);
 
-    private WebCamTexture _webcam;
     private float _allGreenTimer;
     private bool _calibrationDone;
 
@@ -41,40 +38,39 @@ public class CalibrationManager : MonoBehaviour
         if (instructionText != null)
             instructionText.text = "Stand straight and show both hands to the camera";
 
-        // Start camera
-        yield return Application.RequestUserAuthorization(UserAuthorization.WebCam);
-        if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+        // Wait for PoseDetectionManager to start camera and load model
+        if (poseManager == null)
         {
-            Debug.LogError("[CalibrationManager] Camera permission denied.");
+            Debug.LogError("[CalibrationManager] PoseManager not assigned!");
             yield break;
         }
 
-        WebCamDevice? backCam = null;
-        foreach (var device in WebCamTexture.devices)
-        {
-            if (!device.isFrontFacing) { backCam = device; break; }
-        }
-        if (backCam == null) { Debug.LogError("[CalibrationManager] No back camera."); yield break; }
+        // Wait until camera texture is available
+        yield return new WaitUntil(() => poseManager.CameraTexture != null);
 
-        _webcam = new WebCamTexture(backCam.Value.name, 640, 480, 30);
-        _webcam.Play();
-        yield return new WaitUntil(() => _webcam.width > 16);
-
+        // Wire camera feed to background
         if (cameraBackground != null)
         {
-            cameraBackground.texture = _webcam;
-            // Fix portrait rotation from WebCamTexture
-            cameraBackground.rectTransform.localEulerAngles = new Vector3(0, 0, -_webcam.videoRotationAngle);
+            cameraBackground.texture = poseManager.CameraTexture;
+            // Correct portrait rotation + front camera horizontal flip
+            int angle = poseManager.CameraTexture.videoRotationAngle;
+            bool mirrored = poseManager.CameraTexture.videoVerticallyMirrored;
+            cameraBackground.rectTransform.localEulerAngles = new Vector3(0, 0, -angle);
+            cameraBackground.rectTransform.localScale = new Vector3(mirrored ? -1 : 1, 1, 1);
         }
+
+        // Wait for MediaPipe model to finish loading
+        yield return new WaitUntil(() => poseManager.IsReady);
+        Debug.Log("[CalibrationManager] PoseManager ready — starting calibration.");
     }
 
     private void Update()
     {
-        if (_calibrationDone || poseManager == null) return;
+        if (_calibrationDone || poseManager == null || !poseManager.IsReady) return;
 
-        bool headOk  = poseManager.Nose.z         >= visibilityThreshold;
-        bool leftOk  = poseManager.LeftWrist.z    >= visibilityThreshold;
-        bool rightOk = poseManager.RightWrist.z   >= visibilityThreshold;
+        bool headOk  = poseManager.Nose.z      >= visibilityThreshold;
+        bool leftOk  = poseManager.LeftWrist.z >= visibilityThreshold;
+        bool rightOk = poseManager.RightWrist.z >= visibilityThreshold;
 
         SetDotColor(headDot,       headOk  ? Green : Red);
         SetDotColor(leftWristDot,  leftOk  ? Green : Red);
@@ -83,12 +79,17 @@ public class CalibrationManager : MonoBehaviour
         if (headOk && leftOk && rightOk)
         {
             _allGreenTimer += Time.deltaTime;
+            if (instructionText != null)
+                instructionText.text = $"Hold still... {Mathf.CeilToInt(holdDurationSeconds - _allGreenTimer + 1)}";
+
             if (_allGreenTimer >= holdDurationSeconds)
                 StartCoroutine(OnCalibrationComplete());
         }
         else
         {
             _allGreenTimer = 0f;
+            if (instructionText != null)
+                instructionText.text = "Stand straight and show both hands to the camera";
         }
     }
 
@@ -99,14 +100,14 @@ public class CalibrationManager : MonoBehaviour
         if (instructionText != null)
             instructionText.text = "Great! Get ready...";
 
-        if (successAudio != null)
+        if (successAudio != null && successAudio.clip != null)
         {
             successAudio.Play();
-            yield return new WaitForSeconds(successAudio.clip != null ? successAudio.clip.length : 0.5f);
+            yield return new WaitForSeconds(successAudio.clip.length);
         }
         else
         {
-            yield return new WaitForSeconds(0.5f);
+            yield return new WaitForSeconds(0.8f);
         }
 
         SceneManager.LoadScene(nextSceneName);
@@ -115,10 +116,5 @@ public class CalibrationManager : MonoBehaviour
     private static void SetDotColor(Image dot, Color c)
     {
         if (dot != null) dot.color = c;
-    }
-
-    private void OnDestroy()
-    {
-        if (_webcam != null && _webcam.isPlaying) _webcam.Stop();
     }
 }

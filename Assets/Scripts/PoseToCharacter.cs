@@ -148,11 +148,9 @@ public class PoseToCharacter : MonoBehaviour
     /// </summary>
     private Vector3 LandmarkToWorld(Vector3 landmark)
     {
-        // Mirror X so character matches viewer (like a mirror)
-        float mx = 1f - landmark.x;
-
+        // Front camera is already mirrored — no X flip needed
         // Map [0,1] → [-0.5, 0.5] then scale
-        float wx = (mx - 0.5f) * worldScale;
+        float wx = (landmark.x - 0.5f) * worldScale;
         float wy = (0.5f - landmark.y) * worldScale; // y flipped: image y=0 is top
 
         Vector3 origin = hipCenter != null ? hipCenter.position : transform.position;
