@@ -21,7 +21,7 @@ public class PoseDetectionManager : MonoBehaviour
     private const int LEFT_HIP       = 23;
     private const int RIGHT_HIP      = 24;
 
-    // Public landmark properties (normalized 0-1 coords + visibility in z)
+    // Public landmark properties (normalized x/y plus MediaPipe relative z depth)
     public Vector3 Nose           { get; private set; }
     public Vector3 LeftShoulder   { get; private set; }
     public Vector3 RightShoulder  { get; private set; }
@@ -31,6 +31,17 @@ public class PoseDetectionManager : MonoBehaviour
     public Vector3 RightWrist     { get; private set; }
     public Vector3 LeftHip        { get; private set; }
     public Vector3 RightHip       { get; private set; }
+
+    // Visibility is tracked separately from depth so downstream solvers can use true 3D coordinates.
+    public float NoseVisibility           { get; private set; }
+    public float LeftShoulderVisibility   { get; private set; }
+    public float RightShoulderVisibility  { get; private set; }
+    public float LeftElbowVisibility      { get; private set; }
+    public float RightElbowVisibility     { get; private set; }
+    public float LeftWristVisibility      { get; private set; }
+    public float RightWristVisibility     { get; private set; }
+    public float LeftHipVisibility        { get; private set; }
+    public float RightHipVisibility       { get; private set; }
 
     // Expose camera texture so other scripts (e.g. CalibrationManager) can display it
     public WebCamTexture CameraTexture => _webcamTexture;
@@ -159,6 +170,16 @@ public class PoseDetectionManager : MonoBehaviour
             LeftHip       = ToVector3(landmarks, LEFT_HIP);
             RightHip      = ToVector3(landmarks, RIGHT_HIP);
 
+            NoseVisibility          = GetVisibility(landmarks, NOSE);
+            LeftShoulderVisibility  = GetVisibility(landmarks, LEFT_SHOULDER);
+            RightShoulderVisibility = GetVisibility(landmarks, RIGHT_SHOULDER);
+            LeftElbowVisibility     = GetVisibility(landmarks, LEFT_ELBOW);
+            RightElbowVisibility    = GetVisibility(landmarks, RIGHT_ELBOW);
+            LeftWristVisibility     = GetVisibility(landmarks, LEFT_WRIST);
+            RightWristVisibility    = GetVisibility(landmarks, RIGHT_WRIST);
+            LeftHipVisibility       = GetVisibility(landmarks, LEFT_HIP);
+            RightHipVisibility      = GetVisibility(landmarks, RIGHT_HIP);
+
             _frameCount++;
             if (_frameCount % 60 == 0)
             {
@@ -176,8 +197,17 @@ public class PoseDetectionManager : MonoBehaviour
     {
         if (index >= landmarks.Count) return Vector3.zero;
         var lm = landmarks[index];
-        // x, y are normalized [0,1]; z holds visibility score
-        return new Vector3(lm.x, lm.y, lm.visibility ?? 0f);
+        // MediaPipe pose z is relative depth in the same normalized space as x/y.
+        // Visibility is exposed separately so callers can use both depth and confidence.
+        return new Vector3(lm.x, lm.y, lm.z);
+    }
+
+    private static float GetVisibility(
+        System.Collections.Generic.IList<Mediapipe.Tasks.Components.Containers.NormalizedLandmark> landmarks,
+        int index)
+    {
+        if (index >= landmarks.Count) return 0f;
+        return landmarks[index].visibility ?? 0f;
     }
 
     private void OnDestroy()

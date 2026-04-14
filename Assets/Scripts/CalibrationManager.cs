@@ -83,9 +83,9 @@ public class CalibrationManager : MonoBehaviour
     {
         if (_calibrationDone || poseManager == null || !poseManager.IsReady) return;
 
-        bool headOk  = poseManager.Nose.z      >= visibilityThreshold;
-        bool leftOk  = poseManager.LeftWrist.z >= visibilityThreshold;
-        bool rightOk = poseManager.RightWrist.z >= visibilityThreshold;
+        bool headOk  = poseManager.NoseVisibility >= visibilityThreshold;
+        bool leftOk  = poseManager.LeftWristVisibility >= visibilityThreshold;
+        bool rightOk = poseManager.RightWristVisibility >= visibilityThreshold;
 
         SetDotColor(headDot,       headOk  ? Green : Red);
         SetDotColor(leftWristDot,  leftOk  ? Green : Red);
