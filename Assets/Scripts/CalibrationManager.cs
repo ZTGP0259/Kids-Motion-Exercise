@@ -6,6 +6,13 @@ using UnityEngine.UI;
 /// <summary>
 /// Manages the CalibrateScreen scene.
 /// Uses PoseDetectionManager for both camera feed and landmark visibility.
+///
+/// Flow:
+///   1. Show camera feed + 3 dots (head, left wrist, right wrist)
+///   2. Dots turn green when landmarks are visible
+///   3. All green for holdDurationSeconds → calibration complete
+///   4. Saves calibrated T-pose directions for PoseToCharacter
+///   5. Transitions to GameScene
 /// </summary>
 public class CalibrationManager : MonoBehaviour
 {
@@ -20,7 +27,7 @@ public class CalibrationManager : MonoBehaviour
 
     [Header("Settings")]
     public float visibilityThreshold = 0.7f;
-    public float holdDurationSeconds  = 1.5f;
+    public float holdDurationSeconds  = 3.0f;
     public string nextSceneName       = "GameScene";
 
     private static readonly Color Red   = new Color(0.9f, 0.15f, 0.15f, 1f);
@@ -28,6 +35,14 @@ public class CalibrationManager : MonoBehaviour
 
     private float _allGreenTimer;
     private bool _calibrationDone;
+
+    // ── Static storage for calibrated T-pose directions ──
+    // Persists across scene loads so GameScene can use them.
+    public static bool HasCalibrationData { get; private set; }
+    public static Vector3 CalLeftUpperDir  { get; private set; }
+    public static Vector3 CalLeftLowerDir  { get; private set; }
+    public static Vector3 CalRightUpperDir { get; private set; }
+    public static Vector3 CalRightLowerDir { get; private set; }
 
     private IEnumerator Start()
     {
@@ -97,6 +112,11 @@ public class CalibrationManager : MonoBehaviour
     {
         _calibrationDone = true;
 
+        // ── Capture T-pose landmark directions ──
+        // Player is holding T-pose right now — save their actual arm directions
+        // so PoseToCharacter can compute accurate deltas.
+        CaptureTPoseDirections();
+
         if (instructionText != null)
             instructionText.text = "Great! Get ready...";
 
@@ -111,6 +131,28 @@ public class CalibrationManager : MonoBehaviour
         }
 
         SceneManager.LoadScene(nextSceneName);
+    }
+
+    /// <summary>
+    /// Captures the current landmark directions as T-pose reference.
+    /// Stored in static fields so they survive the scene transition.
+    /// </summary>
+    private void CaptureTPoseDirections()
+    {
+        CalLeftUpperDir  = DirBetween(poseManager.LeftShoulder,  poseManager.LeftElbow);
+        CalLeftLowerDir  = DirBetween(poseManager.LeftElbow,     poseManager.LeftWrist);
+        CalRightUpperDir = DirBetween(poseManager.RightShoulder, poseManager.RightElbow);
+        CalRightLowerDir = DirBetween(poseManager.RightElbow,    poseManager.RightWrist);
+        HasCalibrationData = true;
+
+        Debug.Log($"[CalibrationManager] T-pose captured: LU={CalLeftUpperDir:F2} RU={CalRightUpperDir:F2}");
+    }
+
+    private static Vector3 DirBetween(Vector3 from, Vector3 to)
+    {
+        float dx = to.x - from.x;
+        float dy = -(to.y - from.y);
+        return new Vector3(dx, dy, 0f).normalized;
     }
 
     private static void SetDotColor(Image dot, Color c)
