@@ -263,9 +263,10 @@ public class PoseToCharacter : MonoBehaviour
     /// </summary>
     private void SolveHead(float blend)
     {
-        // Compute head direction: mid-shoulders → nose
-        Vector3 midShoulder = 0.5f * (Lm(poseManager.LeftShoulder) + Lm(poseManager.RightShoulder));
-        Vector3 nosePos = Lm(poseManager.Nose);
+        // Use raw landmarks (no mirror) for head — head should tilt
+        // the SAME direction as the user, not mirrored like arms.
+        Vector3 midShoulder = 0.5f * (LmRaw(poseManager.LeftShoulder) + LmRaw(poseManager.RightShoulder));
+        Vector3 nosePos = LmRaw(poseManager.Nose);
         Vector3 headDir = nosePos - midShoulder;
         if (!Norm(ref headDir)) return;
 
@@ -301,6 +302,15 @@ public class PoseToCharacter : MonoBehaviour
         if (mirrorX) x = -x;
         float y = 0.5f - landmark.y;
         return new Vector3(x, y, 0f);
+    }
+
+    /// <summary>
+    /// Same as Lm but without mirror — used for head tilt which should
+    /// match the user's direction, not be mirrored like arms.
+    /// </summary>
+    private static Vector3 LmRaw(Vector3 landmark)
+    {
+        return new Vector3(landmark.x - 0.5f, 0.5f - landmark.y, 0f);
     }
 
     private static bool Norm(ref Vector3 v)
