@@ -160,15 +160,21 @@ public class PoseDetectionManager : MonoBehaviour
         if (result.poseLandmarks != null && result.poseLandmarks.Count > 0)
         {
             var landmarks = result.poseLandmarks[0].landmarks;
-            Nose          = ToVector3(landmarks, NOSE);
-            LeftShoulder  = ToVector3(landmarks, LEFT_SHOULDER);
-            RightShoulder = ToVector3(landmarks, RIGHT_SHOULDER);
-            LeftElbow     = ToVector3(landmarks, LEFT_ELBOW);
-            RightElbow    = ToVector3(landmarks, RIGHT_ELBOW);
-            LeftWrist     = ToVector3(landmarks, LEFT_WRIST);
-            RightWrist    = ToVector3(landmarks, RIGHT_WRIST);
-            LeftHip       = ToVector3(landmarks, LEFT_HIP);
-            RightHip      = ToVector3(landmarks, RIGHT_HIP);
+
+            // Correct for camera rotation: MediaPipe landmarks are in the RAW
+            // image coordinate system, but we need screen-oriented coordinates.
+            // videoRotationAngle = degrees CW to rotate raw image for correct display.
+            int rotAngle = _webcamTexture.videoRotationAngle;
+
+            Nose          = CorrectRotation(ToVector3(landmarks, NOSE), rotAngle);
+            LeftShoulder  = CorrectRotation(ToVector3(landmarks, LEFT_SHOULDER), rotAngle);
+            RightShoulder = CorrectRotation(ToVector3(landmarks, RIGHT_SHOULDER), rotAngle);
+            LeftElbow     = CorrectRotation(ToVector3(landmarks, LEFT_ELBOW), rotAngle);
+            RightElbow    = CorrectRotation(ToVector3(landmarks, RIGHT_ELBOW), rotAngle);
+            LeftWrist     = CorrectRotation(ToVector3(landmarks, LEFT_WRIST), rotAngle);
+            RightWrist    = CorrectRotation(ToVector3(landmarks, RIGHT_WRIST), rotAngle);
+            LeftHip       = CorrectRotation(ToVector3(landmarks, LEFT_HIP), rotAngle);
+            RightHip      = CorrectRotation(ToVector3(landmarks, RIGHT_HIP), rotAngle);
 
             NoseVisibility          = GetVisibility(landmarks, NOSE);
             LeftShoulderVisibility  = GetVisibility(landmarks, LEFT_SHOULDER);
@@ -183,12 +189,42 @@ public class PoseDetectionManager : MonoBehaviour
             _frameCount++;
             if (_frameCount % 60 == 0)
             {
-                Debug.Log($"[Pose] Nose={Nose:F3} | L.Shoulder={LeftShoulder:F3} | R.Shoulder={RightShoulder:F3}");
+                Debug.Log($"[Pose] rot={rotAngle} | Nose={Nose:F3} | L.Shoulder={LeftShoulder:F3} | R.Shoulder={RightShoulder:F3}");
                 Debug.Log($"[Pose] L.Elbow={LeftElbow:F3} | R.Elbow={RightElbow:F3}");
                 Debug.Log($"[Pose] L.Wrist={LeftWrist:F3} | R.Wrist={RightWrist:F3}");
-                Debug.Log($"[Pose] L.Hip={LeftHip:F3} | R.Hip={RightHip:F3}");
             }
         }
+    }
+
+    /// <summary>
+    /// Rotates landmark (x,y) from raw image coordinates to screen-oriented coordinates.
+    /// On Android, the front camera raw image is often rotated (e.g. 270° for portrait).
+    /// videoRotationAngle tells us how many degrees CW to rotate for correct display.
+    /// We apply that same rotation to the landmark coordinates.
+    /// Z (depth) is unaffected by 2D rotation.
+    /// </summary>
+    private static Vector3 CorrectRotation(Vector3 raw, int angleDeg)
+    {
+        float x = raw.x, y = raw.y;
+        float nx, ny;
+        switch (angleDeg)
+        {
+            case 90:
+                // 90° CW: (x,y) → (1-y, x)
+                nx = 1f - y; ny = x;
+                break;
+            case 180:
+                nx = 1f - x; ny = 1f - y;
+                break;
+            case 270:
+                // 270° CW (= 90° CCW): (x,y) → (y, 1-x)
+                nx = y; ny = 1f - x;
+                break;
+            default:
+                nx = x; ny = y;
+                break;
+        }
+        return new Vector3(nx, ny, raw.z);
     }
 
     private static Vector3 ToVector3(
