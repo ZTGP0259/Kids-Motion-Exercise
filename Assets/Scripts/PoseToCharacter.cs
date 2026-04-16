@@ -1,18 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// Maps MediaPipe arm landmarks onto a Humanoid character using swing-twist
+/// Maps MediaPipe pose landmarks onto a Humanoid character using swing-twist
 /// decomposition in world space.
 ///
-/// Previous approaches failed because:
-///   - LookRotation: aligns wrong bone axis (Z instead of bone's actual axis)
-///   - FromToRotation: only 2 DOF, missing twist → wrong elbow bend
-///   - Parent-local basis: becomes stale when Animator changes parent bones
-///
-/// This approach:
-///   1. SWING: FromToRotation(bindAim, currentAim) rotates bone to point correctly
-///   2. TWIST: Aligns bend plane around aim axis → correct elbow direction
-///   3. Works in WORLD SPACE (bone.rotation) → immune to parent changes
+/// Arms: swing-twist with bend plane from shoulder-elbow-wrist triangle.
+/// Head: swing-only from nose position relative to mid-shoulders.
+/// All rotations in world space (bone.rotation) — immune to Animator parent changes.
 /// </summary>
 [RequireComponent(typeof(Animator))]
 public class PoseToCharacter : MonoBehaviour
@@ -28,6 +22,14 @@ public class PoseToCharacter : MonoBehaviour
     [Range(1f, 30f)]
     public float smoothSpeed = 14f;
 
+    [Header("Head")]
+    [Range(0f, 40f)]
+    [Tooltip("Max degrees the head can tilt from bind pose.")]
+    public float headMaxAngle = 25f;
+
+    [Range(1f, 20f)]
+    public float headSmoothSpeed = 8f;
+
     [Header("Visibility")]
     [Range(0.1f, 0.9f)]
     public float visibilityThreshold = 0.5f;
@@ -35,29 +37,32 @@ public class PoseToCharacter : MonoBehaviour
     private Animator _animator;
     private int _logCounter;
 
+    // ── Arm state ──
     private struct ArmState
     {
         public Transform Upper;
         public Transform Lower;
-
-        // T-pose world rotations (captured once at Start)
         public Quaternion UpperBindRot;
         public Quaternion LowerBindRot;
-
-        // T-pose aim directions in world space (constant)
         public Vector3 UpperBindAim;
         public Vector3 LowerBindAim;
         public Vector3 BindBendNormal;
-
-        // Smoothed output (world rotations)
         public Quaternion UpperSmooth;
         public Quaternion LowerSmooth;
-
-        // Bend normal tracking (root-local for frame consistency)
         public Vector3 LastBendLocal;
     }
 
+    // ── Head state ──
+    private struct HeadState
+    {
+        public Transform Bone;
+        public Quaternion BindRot;      // world rotation in T-pose
+        public Vector3 BindAimWorld;    // neck→head direction in T-pose
+        public Quaternion Smooth;       // smoothed world rotation
+    }
+
     private ArmState _left, _right;
+    private HeadState _head;
 
     private void Awake() => _animator = GetComponent<Animator>();
 
@@ -80,8 +85,23 @@ public class PoseToCharacter : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[PoseToCharacter] Ready. L.bindAim={_left.UpperBindAim:F2} R.bindAim={_right.UpperBindAim:F2} " +
-                  $"L.bend={_left.BindBendNormal:F2}");
+        // ── Head setup ──
+        Transform headBone = _animator.GetBoneTransform(HumanBodyBones.Head);
+        Transform neckBone = _animator.GetBoneTransform(HumanBodyBones.Neck);
+        if (headBone != null && neckBone != null)
+        {
+            Vector3 headAim = (headBone.position - neckBone.position).normalized;
+            _head = new HeadState
+            {
+                Bone = headBone,
+                BindRot = headBone.rotation,
+                BindAimWorld = headAim,
+                Smooth = headBone.rotation
+            };
+            Debug.Log($"[PoseToCharacter] Head ready. bindAim={headAim:F2}");
+        }
+
+        Debug.Log($"[PoseToCharacter] Arms ready. L.bindAim={_left.UpperBindAim:F2} R.bindAim={_right.UpperBindAim:F2}");
     }
 
     private ArmState BuildArm(HumanBodyBones upper, HumanBodyBones lower, HumanBodyBones hand)
@@ -95,13 +115,9 @@ public class PoseToCharacter : MonoBehaviour
         Vector3 uAim = (l.position - u.position).normalized;
         Vector3 lAim = (h.position - l.position).normalized;
 
-        // Bend plane: cross product of upper and lower arm directions
         Vector3 bend = Vector3.Cross(uAim, lAim);
         if (bend.sqrMagnitude < 0.0001f)
-        {
-            // Arm straight in T-pose — assume elbows bend forward (toward camera)
             bend = transform.forward;
-        }
         bend.Normalize();
 
         return new ArmState
@@ -123,7 +139,8 @@ public class PoseToCharacter : MonoBehaviour
     {
         if (poseManager == null) return;
 
-        float blend = 1f - Mathf.Exp(-smoothSpeed * Time.deltaTime);
+        float armBlend = 1f - Mathf.Exp(-smoothSpeed * Time.deltaTime);
+        float headBlend = 1f - Mathf.Exp(-headSmoothSpeed * Time.deltaTime);
 
         bool lVis = poseManager.LeftShoulderVisibility  >= visibilityThreshold &&
                     poseManager.LeftElbowVisibility      >= visibilityThreshold &&
@@ -133,6 +150,10 @@ public class PoseToCharacter : MonoBehaviour
                     poseManager.RightElbowVisibility     >= visibilityThreshold &&
                     poseManager.RightWristVisibility      >= visibilityThreshold;
 
+        bool headVis = poseManager.NoseVisibility            >= visibilityThreshold &&
+                       poseManager.LeftShoulderVisibility    >= visibilityThreshold &&
+                       poseManager.RightShoulderVisibility   >= visibilityThreshold;
+
         // ── Debug every ~1.5s ──
         _logCounter++;
         if (_logCounter % 90 == 0)
@@ -140,35 +161,43 @@ public class PoseToCharacter : MonoBehaviour
             Vector3 ls = poseManager.LeftShoulder;
             Vector3 le = poseManager.LeftElbow;
             Vector3 rs = poseManager.RightShoulder;
-            Vector3 trkDir = (Lm(le) - Lm(ls)).normalized;
-            Vector3 worldDir = transform.TransformDirection(trkDir);
-            Debug.Log($"[PTC] lVis={lVis}(sv{poseManager.LeftShoulderVisibility:F1} ev{poseManager.LeftElbowVisibility:F1} wv{poseManager.LeftWristVisibility:F1}) " +
-                      $"rVis={rVis} | LS({ls.x:F2},{ls.y:F2}) LE({le.x:F2},{le.y:F2}) RS({rs.x:F2},{rs.y:F2}) " +
-                      $"trkDir={trkDir:F2} worldDir={worldDir:F2} bindAim={_left.UpperBindAim:F2}");
+            Debug.Log($"[PTC] lVis={lVis} rVis={rVis} headVis={headVis} | " +
+                      $"LS({ls.x:F2},{ls.y:F2}) LE({le.x:F2},{le.y:F2}) RS({rs.x:F2},{rs.y:F2})");
         }
 
+        // ── Arms ──
         if (lVis)
         {
             SolveArm(ref _left,
                 Lm(poseManager.LeftShoulder), Lm(poseManager.LeftElbow), Lm(poseManager.LeftWrist),
-                blend);
+                armBlend);
         }
 
         if (rVis)
         {
             SolveArm(ref _right,
                 Lm(poseManager.RightShoulder), Lm(poseManager.RightElbow), Lm(poseManager.RightWrist),
-                blend);
+                armBlend);
+        }
+
+        // ── Head ──
+        if (headVis && _head.Bone != null)
+        {
+            SolveHead(headBlend);
         }
     }
+
+    // ═══════════════════════════════════════════
+    //  ARM SOLVER
+    // ═══════════════════════════════════════════
 
     private void SolveArm(ref ArmState arm, Vector3 shoulder, Vector3 elbow, Vector3 wrist, float blend)
     {
         Vector3 upperDir = elbow - shoulder;
         Vector3 lowerDir = wrist - elbow;
-        if (!Normalize(ref upperDir) || !Normalize(ref lowerDir)) return;
+        if (!Norm(ref upperDir) || !Norm(ref lowerDir)) return;
 
-        // ── Bend plane from arm triangle ──
+        // Bend plane from arm triangle
         Vector3 bendLocal = Vector3.Cross(upperDir, lowerDir);
         if (bendLocal.sqrMagnitude < 0.001f)
         {
@@ -182,12 +211,10 @@ public class PoseToCharacter : MonoBehaviour
         }
         arm.LastBendLocal = bendLocal;
 
-        // ── Convert to world space ──
         Vector3 upperWorld = transform.TransformDirection(upperDir);
         Vector3 lowerWorld = transform.TransformDirection(lowerDir);
         Vector3 bendWorld  = transform.TransformDirection(bendLocal);
 
-        // ── Solve upper arm ──
         if (arm.Upper != null)
         {
             Quaternion target = SwingTwist(arm.UpperBindAim, upperWorld, arm.BindBendNormal, bendWorld, arm.UpperBindRot);
@@ -195,7 +222,6 @@ public class PoseToCharacter : MonoBehaviour
             arm.Upper.rotation = arm.UpperSmooth;
         }
 
-        // ── Solve lower arm ──
         if (arm.Lower != null)
         {
             Quaternion target = SwingTwist(arm.LowerBindAim, lowerWorld, arm.BindBendNormal, bendWorld, arm.LowerBindRot);
@@ -204,32 +230,14 @@ public class PoseToCharacter : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Computes a target world rotation via swing-twist decomposition.
-    ///
-    /// SWING: Rotates the bind aim direction to the current aim direction.
-    ///        This is the "pointing" part — where does the bone aim?
-    ///
-    /// TWIST: After swing, the bend plane normal may not match the detected one.
-    ///        We twist around the aim axis to align it.
-    ///        This constrains the elbow to bend in the correct anatomical direction.
-    ///
-    /// Result: twist * swing * bindRotation
-    /// </summary>
     private static Quaternion SwingTwist(
         Vector3 bindAim, Vector3 currentAim,
         Vector3 bindBend, Vector3 currentBend,
         Quaternion bindRot)
     {
-        // Step 1: Swing — rotate from bind aim to current aim
         Quaternion swing = Quaternion.FromToRotation(bindAim, currentAim);
 
-        // Step 2: Twist — align bend normal around the aim axis
-        // The swing moved the bind bend normal; see where it ended up:
         Vector3 swungBend = swing * bindBend;
-
-        // Project both onto the plane perpendicular to current aim
-        // (only the component perpendicular to the aim axis matters for twist)
         Vector3 swungProj  = Vector3.ProjectOnPlane(swungBend, currentAim);
         Vector3 targetProj = Vector3.ProjectOnPlane(currentBend, currentAim);
 
@@ -239,13 +247,53 @@ public class PoseToCharacter : MonoBehaviour
             twist = Quaternion.FromToRotation(swungProj.normalized, targetProj.normalized);
         }
 
-        // Step 3: Combine — twist * swing * bindRotation
         return twist * swing * bindRot;
     }
 
+    // ═══════════════════════════════════════════
+    //  HEAD SOLVER
+    // ═══════════════════════════════════════════
+
     /// <summary>
-    /// Converts a MediaPipe landmark to root-local 2D position.
-    /// Z depth is ignored (too noisy on mobile).
+    /// Tilts the head bone based on nose position relative to mid-shoulders.
+    ///
+    /// In T-pose, the direction from mid-shoulders to nose is straight up.
+    /// When the user tilts their head, this direction changes.
+    /// We apply a clamped swing rotation to match.
+    /// </summary>
+    private void SolveHead(float blend)
+    {
+        // Compute head direction: mid-shoulders → nose
+        Vector3 midShoulder = 0.5f * (Lm(poseManager.LeftShoulder) + Lm(poseManager.RightShoulder));
+        Vector3 nosePos = Lm(poseManager.Nose);
+        Vector3 headDir = nosePos - midShoulder;
+        if (!Norm(ref headDir)) return;
+
+        // Convert to world space
+        Vector3 headDirWorld = transform.TransformDirection(headDir);
+
+        // Swing from bind direction to current
+        Quaternion swing = Quaternion.FromToRotation(_head.BindAimWorld, headDirWorld);
+
+        // Clamp rotation to prevent unnatural over-rotation
+        float angle = Quaternion.Angle(Quaternion.identity, swing);
+        if (angle > headMaxAngle)
+        {
+            swing = Quaternion.Slerp(Quaternion.identity, swing, headMaxAngle / angle);
+        }
+
+        Quaternion target = swing * _head.BindRot;
+        _head.Smooth = Quaternion.Slerp(_head.Smooth, target, blend);
+        _head.Bone.rotation = _head.Smooth;
+    }
+
+    // ═══════════════════════════════════════════
+    //  UTILITIES
+    // ═══════════════════════════════════════════
+
+    /// <summary>
+    /// Converts a MediaPipe landmark (now rotation-corrected by PoseDetectionManager)
+    /// to root-local 2D position. Z depth ignored (too noisy on mobile).
     /// </summary>
     private Vector3 Lm(Vector3 landmark)
     {
@@ -255,7 +303,7 @@ public class PoseToCharacter : MonoBehaviour
         return new Vector3(x, y, 0f);
     }
 
-    private static bool Normalize(ref Vector3 v)
+    private static bool Norm(ref Vector3 v)
     {
         float m = v.magnitude;
         if (m < 0.0001f) return false;

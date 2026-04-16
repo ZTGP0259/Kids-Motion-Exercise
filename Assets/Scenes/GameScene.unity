@@ -510,16 +510,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseToCharacter
   poseManager: {fileID: 1643934857}
-  mirrorHorizontally: 1
-  trackingScale: 2
-  depthScale: 2.5
+  mirrorX: 1
+  smoothSpeed: 14
+  headMaxAngle: 25
+  headSmoothSpeed: 8
   visibilityThreshold: 0.5
-  straightArmEpsilon: 0.0025
-  rotationSmoothing: 14
-  torsoSmoothing: 10
-  upperArmMaxDegreesFromBind: 150
-  lowerArmMaxDegreesFromBind: 165
-  torsoMaxDegreesFromBind: 55
 --- !u!1 &1643934856
 GameObject:
   m_ObjectHideFlags: 0
@@ -712,8 +707,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -40, y: -120}
-  m_SizeDelta: {x: 340, y: 400}
+  m_AnchoredPosition: {x: -42, y: -80}
+  m_SizeDelta: {x: 320, y: 450}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &2090257007
 MonoBehaviour:
@@ -859,7 +854,7 @@ SceneRoots:
   - {fileID: 330585546}
   - {fileID: 410087041}
   - {fileID: 832575519}
-  - {fileID: 2090257012}
-  - {fileID: 1649093756}
-  - {fileID: 1501242730}
   - {fileID: 1643934858}
+  - {fileID: 1649093756}
+  - {fileID: 2090257012}
+  - {fileID: 1501242730}

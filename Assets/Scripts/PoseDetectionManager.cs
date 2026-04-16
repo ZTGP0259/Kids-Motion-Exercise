@@ -53,6 +53,11 @@ public class PoseDetectionManager : MonoBehaviour
     private int _frameCount;
     private bool _isReady;
 
+    private void Awake()
+    {
+        Screen.orientation = ScreenOrientation.Portrait;
+    }
+
     private IEnumerator Start()
     {
         // Request camera permission and wait for it
@@ -94,7 +99,38 @@ public class PoseDetectionManager : MonoBehaviour
         yield return new WaitUntil(() => _webcamTexture.width > 16);
 
         if (cameraDisplay != null)
+        {
             cameraDisplay.texture = _webcamTexture;
+
+            int angle = _webcamTexture.videoRotationAngle;
+            bool mirrored = _webcamTexture.videoVerticallyMirrored;
+            RectTransform rt = cameraDisplay.rectTransform;
+
+            // Use center pivot so rotation doesn't push the element off-screen
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+
+            // Rotate to match camera orientation
+            rt.localEulerAngles = new Vector3(0, 0, -angle);
+
+            // Mirror for front camera
+            rt.localScale = new Vector3(mirrored ? -1 : 1, 1, 1);
+
+            // Position + size: account for rotation swapping width/height
+            // Preview sits in top-right corner with 20px right padding, 50px top padding
+            if (angle == 90 || angle == 270)
+            {
+                rt.sizeDelta = new Vector2(350, 250);
+                rt.anchoredPosition = new Vector2(-195, -175);
+            }
+            else
+            {
+                rt.sizeDelta = new Vector2(250, 350);
+                rt.anchoredPosition = new Vector2(-145, -225);
+            }
+
+            Debug.Log($"[PoseDetectionManager] Camera preview: rot={angle} mirrored={mirrored} size={rt.sizeDelta}");
+        }
 
         _inputTexture = new Texture2D(_webcamTexture.width, _webcamTexture.height, TextureFormat.RGBA32, false);
 
