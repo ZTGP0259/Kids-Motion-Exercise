@@ -13,3 +13,4 @@ Project Key: `kme`
 | Timestamp | Task ID | Changed By | Change |
 |-----------|---------|------------|--------|
 | 2026-04-17 17:30 | — | Gourav Patidar | SDD backlog structure initialized |
+| 2026-04-17 17:45 | — | Gourav Patidar | Project CLAUDE.md + quality-gate-process.md added |
