@@ -30,6 +30,11 @@ public class PoseToCharacter : MonoBehaviour
     [Range(1f, 20f)]
     public float headSmoothSpeed = 8f;
 
+    [Header("Depth (Z)")]
+    [Range(0f, 3f)]
+    [Tooltip("Scale for MediaPipe z depth. 0 = flat 2D, higher = more 3D depth. Start with 0.5.")]
+    public float depthScale = 0.5f;
+
     [Header("Visibility")]
     [Range(0.1f, 0.9f)]
     public float visibilityThreshold = 0.5f;
@@ -293,24 +298,27 @@ public class PoseToCharacter : MonoBehaviour
     // ═══════════════════════════════════════════
 
     /// <summary>
-    /// Converts a MediaPipe landmark (now rotation-corrected by PoseDetectionManager)
-    /// to root-local 2D position. Z depth ignored (too noisy on mobile).
+    /// Converts a MediaPipe landmark to root-local 3D position.
+    /// x/y from normalized screen coords, z from MediaPipe relative depth.
+    /// MediaPipe z: more negative = closer to camera. We map to +Z = forward (toward camera).
     /// </summary>
     private Vector3 Lm(Vector3 landmark)
     {
         float x = landmark.x - 0.5f;
         if (mirrorX) x = -x;
         float y = 0.5f - landmark.y;
-        return new Vector3(x, y, 0f);
+        float z = -landmark.z * depthScale; // negate: MP closer=negative, we want closer=positive
+        return new Vector3(x, y, z);
     }
 
     /// <summary>
     /// Same as Lm but without mirror — used for head tilt which should
     /// match the user's direction, not be mirrored like arms.
     /// </summary>
-    private static Vector3 LmRaw(Vector3 landmark)
+    private Vector3 LmRaw(Vector3 landmark)
     {
-        return new Vector3(landmark.x - 0.5f, 0.5f - landmark.y, 0f);
+        float z = -landmark.z * depthScale;
+        return new Vector3(landmark.x - 0.5f, 0.5f - landmark.y, z);
     }
 
     private static bool Norm(ref Vector3 v)
