@@ -181,6 +181,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 66f8f8b13be0046208f27d99f8532940, type: 3}
       insertIndex: -1
       addedObject: {fileID: 42909881}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 66f8f8b13be0046208f27d99f8532940, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 42909883}
   m_SourcePrefab: {fileID: 100100000, guid: 66f8f8b13be0046208f27d99f8532940, type: 3}
 --- !u!1 &42909879 stripped
 GameObject:
@@ -197,7 +200,7 @@ Animator:
   m_GameObject: {fileID: 42909879}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 66f8f8b13be0046208f27d99f8532940, type: 3}
-  m_Controller: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 1335c0f1d8fa346759168976e948d1c5, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
   m_ApplyRootMotion: 1
@@ -228,6 +231,25 @@ MonoBehaviour:
   headSmoothSpeed: 8
   depthScale: 0.5
   visibilityThreshold: 0.5
+--- !u!114 &42909883
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 42909879}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c8723441ceedf4279a2904bef00a6862, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::JumpDetector
+  poseManager: {fileID: 1643934857}
+  jumpThresholdOffset: 0.08
+  minUpwardVelocity: 0.15
+  cooldownSeconds: 0.5
+  hipSmoothSpeed: 15
+  visibilityThreshold: 0.4
+  jumpTriggerName: Jump
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0

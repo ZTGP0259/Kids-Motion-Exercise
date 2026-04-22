@@ -44,6 +44,12 @@ public class CalibrationManager : MonoBehaviour
     public static Vector3 CalRightUpperDir { get; private set; }
     public static Vector3 CalRightLowerDir { get; private set; }
 
+    // ── Baseline hip Y (rotation-corrected MediaPipe coords) ──
+    // Y convention: 0 = top of screen, 1 = bottom. When the user jumps UP, hipY DECREASES.
+    // Jump detection uses: jumpThreshold = BaselineHipY - jumpThresholdOffset.
+    public static bool HasBaselineHipY { get; private set; }
+    public static float BaselineHipY   { get; private set; }
+
     private IEnumerator Start()
     {
         SetDotColor(headDot,       Red);
@@ -144,6 +150,21 @@ public class CalibrationManager : MonoBehaviour
         CalRightUpperDir = DirBetween(poseManager.RightShoulder, poseManager.RightElbow);
         CalRightLowerDir = DirBetween(poseManager.RightElbow,    poseManager.RightWrist);
         HasCalibrationData = true;
+
+        // Capture baseline hip Y (average) for jump detection.
+        // Only accept if both hip landmarks are reliably visible.
+        if (poseManager.LeftHipVisibility  >= visibilityThreshold &&
+            poseManager.RightHipVisibility >= visibilityThreshold)
+        {
+            BaselineHipY = 0.5f * (poseManager.LeftHip.y + poseManager.RightHip.y);
+            HasBaselineHipY = true;
+            Debug.Log($"[CalibrationManager] Baseline hip Y captured: {BaselineHipY:F3}");
+        }
+        else
+        {
+            HasBaselineHipY = false;
+            Debug.LogWarning($"[CalibrationManager] Hips not reliably visible — baseline hip Y not captured. Jump detection disabled.");
+        }
 
         Debug.Log($"[CalibrationManager] T-pose captured: LU={CalLeftUpperDir:F2} RU={CalRightUpperDir:F2}");
     }
