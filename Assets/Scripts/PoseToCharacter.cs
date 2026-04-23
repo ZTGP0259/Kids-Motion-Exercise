@@ -67,6 +67,7 @@ public class PoseToCharacter : MonoBehaviour
     }
 
     private ArmState _left, _right;
+    private ArmState _leftLeg, _rightLeg;
     private HeadState _head;
 
     private void Awake() => _animator = GetComponent<Animator>();
@@ -82,6 +83,11 @@ public class PoseToCharacter : MonoBehaviour
 
         _left = BuildArm(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand);
         _right = BuildArm(HumanBodyBones.RightUpperArm, HumanBodyBones.RightLowerArm, HumanBodyBones.RightHand);
+
+        // Legs — reuse the ArmState struct; it's limb-agnostic.
+        // Third bone is the "end" (hand for arms, foot for legs) used only to compute lower limb direction.
+        _leftLeg  = BuildArm(HumanBodyBones.LeftUpperLeg,  HumanBodyBones.LeftLowerLeg,  HumanBodyBones.LeftFoot);
+        _rightLeg = BuildArm(HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot);
 
         if (_left.Upper == null || _right.Upper == null)
         {
@@ -159,6 +165,14 @@ public class PoseToCharacter : MonoBehaviour
                        poseManager.LeftShoulderVisibility    >= visibilityThreshold &&
                        poseManager.RightShoulderVisibility   >= visibilityThreshold;
 
+        bool llVis = poseManager.LeftHipVisibility   >= visibilityThreshold &&
+                     poseManager.LeftKneeVisibility  >= visibilityThreshold &&
+                     poseManager.LeftAnkleVisibility >= visibilityThreshold;
+
+        bool rlVis = poseManager.RightHipVisibility   >= visibilityThreshold &&
+                     poseManager.RightKneeVisibility  >= visibilityThreshold &&
+                     poseManager.RightAnkleVisibility >= visibilityThreshold;
+
         // ── Debug every ~1.5s ──
         _logCounter++;
         if (_logCounter % 90 == 0)
@@ -182,6 +196,22 @@ public class PoseToCharacter : MonoBehaviour
         {
             SolveArm(ref _right,
                 Lm(poseManager.RightShoulder), Lm(poseManager.RightElbow), Lm(poseManager.RightWrist),
+                armBlend);
+        }
+
+        // ── Legs (hip → knee → ankle) ──
+        // Reuses the same swing-twist solver; legs follow the same math as arms.
+        if (llVis)
+        {
+            SolveArm(ref _leftLeg,
+                Lm(poseManager.LeftHip), Lm(poseManager.LeftKnee), Lm(poseManager.LeftAnkle),
+                armBlend);
+        }
+
+        if (rlVis)
+        {
+            SolveArm(ref _rightLeg,
+                Lm(poseManager.RightHip), Lm(poseManager.RightKnee), Lm(poseManager.RightAnkle),
                 armBlend);
         }
 

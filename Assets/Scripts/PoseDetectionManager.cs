@@ -20,6 +20,8 @@ public class PoseDetectionManager : MonoBehaviour
     private const int RIGHT_WRIST    = 16;
     private const int LEFT_HIP       = 23;
     private const int RIGHT_HIP      = 24;
+    private const int LEFT_KNEE      = 25;
+    private const int RIGHT_KNEE     = 26;
     private const int LEFT_ANKLE     = 27;
     private const int RIGHT_ANKLE    = 28;
 
@@ -33,6 +35,8 @@ public class PoseDetectionManager : MonoBehaviour
     public Vector3 RightWrist     { get; private set; }
     public Vector3 LeftHip        { get; private set; }
     public Vector3 RightHip       { get; private set; }
+    public Vector3 LeftKnee       { get; private set; }
+    public Vector3 RightKnee      { get; private set; }
     public Vector3 LeftAnkle      { get; private set; }
     public Vector3 RightAnkle     { get; private set; }
 
@@ -46,6 +50,8 @@ public class PoseDetectionManager : MonoBehaviour
     public float RightWristVisibility     { get; private set; }
     public float LeftHipVisibility        { get; private set; }
     public float RightHipVisibility       { get; private set; }
+    public float LeftKneeVisibility       { get; private set; }
+    public float RightKneeVisibility      { get; private set; }
     public float LeftAnkleVisibility      { get; private set; }
     public float RightAnkleVisibility     { get; private set; }
 
@@ -74,22 +80,22 @@ public class PoseDetectionManager : MonoBehaviour
             yield break;
         }
 
-        // Find the front-facing camera
+        // TEST: using back camera for preview testing
         WebCamDevice? frontCam = null;
         foreach (var device in WebCamTexture.devices)
         {
-            if (device.isFrontFacing)
+            if (!device.isFrontFacing)
             {
                 frontCam = device;
                 break;
             }
         }
 
-        // Fallback to any camera if no front cam found
+        // Fallback to any camera if no back cam found
         if (frontCam == null && WebCamTexture.devices.Length > 0)
         {
             frontCam = WebCamTexture.devices[0];
-            Debug.LogWarning("[PoseDetectionManager] No front camera found, using default.");
+            Debug.LogWarning("[PoseDetectionManager] No back camera found, using default.");
         }
 
         if (frontCam == null)
@@ -217,6 +223,8 @@ public class PoseDetectionManager : MonoBehaviour
             RightWrist    = CorrectRotation(ToVector3(landmarks, RIGHT_WRIST), rotAngle);
             LeftHip       = CorrectRotation(ToVector3(landmarks, LEFT_HIP), rotAngle);
             RightHip      = CorrectRotation(ToVector3(landmarks, RIGHT_HIP), rotAngle);
+            LeftKnee      = CorrectRotation(ToVector3(landmarks, LEFT_KNEE), rotAngle);
+            RightKnee     = CorrectRotation(ToVector3(landmarks, RIGHT_KNEE), rotAngle);
             LeftAnkle     = CorrectRotation(ToVector3(landmarks, LEFT_ANKLE), rotAngle);
             RightAnkle    = CorrectRotation(ToVector3(landmarks, RIGHT_ANKLE), rotAngle);
 
@@ -229,6 +237,8 @@ public class PoseDetectionManager : MonoBehaviour
             RightWristVisibility    = GetVisibility(landmarks, RIGHT_WRIST);
             LeftHipVisibility       = GetVisibility(landmarks, LEFT_HIP);
             RightHipVisibility      = GetVisibility(landmarks, RIGHT_HIP);
+            LeftKneeVisibility      = GetVisibility(landmarks, LEFT_KNEE);
+            RightKneeVisibility     = GetVisibility(landmarks, RIGHT_KNEE);
             LeftAnkleVisibility     = GetVisibility(landmarks, LEFT_ANKLE);
             RightAnkleVisibility    = GetVisibility(landmarks, RIGHT_ANKLE);
 

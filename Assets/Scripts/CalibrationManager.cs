@@ -57,7 +57,7 @@ public class CalibrationManager : MonoBehaviour
         SetDotColor(rightWristDot, Red);
 
         if (instructionText != null)
-            instructionText.text = "Stand straight and show both hands to the camera";
+            instructionText.text = "Stand straight, show both hands AND your legs to the camera";
 
         // Wait for PoseDetectionManager to start camera and load model
         if (poseManager == null)
@@ -89,15 +89,21 @@ public class CalibrationManager : MonoBehaviour
     {
         if (_calibrationDone || poseManager == null || !poseManager.IsReady) return;
 
-        bool headOk  = poseManager.NoseVisibility >= visibilityThreshold;
-        bool leftOk  = poseManager.LeftWristVisibility >= visibilityThreshold;
+        bool headOk  = poseManager.NoseVisibility       >= visibilityThreshold;
+        bool leftOk  = poseManager.LeftWristVisibility  >= visibilityThreshold;
         bool rightOk = poseManager.RightWristVisibility >= visibilityThreshold;
+
+        // Legs must also be in frame (silent check — no new dots).
+        bool legsOk  = poseManager.LeftHipVisibility    >= visibilityThreshold &&
+                       poseManager.RightHipVisibility   >= visibilityThreshold &&
+                       poseManager.LeftAnkleVisibility  >= visibilityThreshold &&
+                       poseManager.RightAnkleVisibility >= visibilityThreshold;
 
         SetDotColor(headDot,       headOk  ? Green : Red);
         SetDotColor(leftWristDot,  leftOk  ? Green : Red);
         SetDotColor(rightWristDot, rightOk ? Green : Red);
 
-        if (headOk && leftOk && rightOk)
+        if (headOk && leftOk && rightOk && legsOk)
         {
             _allGreenTimer += Time.deltaTime;
             if (instructionText != null)
@@ -110,7 +116,13 @@ public class CalibrationManager : MonoBehaviour
         {
             _allGreenTimer = 0f;
             if (instructionText != null)
-                instructionText.text = "Stand straight and show both hands to the camera";
+            {
+                // Provide helpful hint when only legs are missing
+                if (headOk && leftOk && rightOk && !legsOk)
+                    instructionText.text = "Step back so your legs are also in frame";
+                else
+                    instructionText.text = "Stand straight, show both hands AND your legs to the camera";
+            }
         }
     }
 

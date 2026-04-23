@@ -6,6 +6,7 @@ Project Key: `kme`
 | ID | Type | Title | Status | Complexity | Updated |
 |----|------|-------|--------|------------|---------|
 | kme-001 | feature | Jump detection using MediaPipe Pose | specification | MEDIUM | 2026-04-17 |
+| kme-002 | feature | Full-body replication via leg tracking | specification | MEDIUM | 2026-04-17 |
 
 ---
 
@@ -24,3 +25,8 @@ Project Key: `kme`
 | 2026-04-17 19:05 | kme-001 | Gourav Patidar | Gate 1 re-run — approved (LateUpdate + base capture handles root motion risk) |
 | 2026-04-17 19:10 | kme-001 | Gourav Patidar | Gate 2 re-run — approved (no allocations, single per-frame transform write) |
 | 2026-04-17 19:15 | kme-001 | Gourav Patidar | Gate 3 re-run — approved; all Gate 1/2 findings resolved; spec implementation-ready |
+| 2026-04-17 19:30 | kme-002 | Gourav Patidar | Created task — moved to planning; full-body replication via leg tracking |
+| 2026-04-17 19:40 | kme-002 | Gourav Patidar | Specification complete — complexity: MEDIUM |
+| 2026-04-17 19:45 | kme-002 | Gourav Patidar | Gate 1 approved — ArmState reuse documented; no HIGH/CRITICAL component sync issues |
+| 2026-04-17 19:48 | kme-002 | Gourav Patidar | Gate 2 approved — no allocations; existing null guards sufficient |
+| 2026-04-17 19:50 | kme-002 | Gourav Patidar | Gate 3 approved — all Gate 1/2 findings resolved; predicted bugs covered by existing edge cases; moved to specification/ |
