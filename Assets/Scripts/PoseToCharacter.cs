@@ -68,7 +68,49 @@ public class PoseToCharacter : MonoBehaviour
 
     private ArmState _left, _right;
     private ArmState _leftLeg, _rightLeg;
+    private FootState _leftFoot, _rightFoot;
+    private FootState _leftHand, _rightHand;  // reuse FootState struct — same single-swing pattern
     private HeadState _head;
+    private TorsoState _torso;
+
+    // ── Torso state ──
+    // Rotates Spine/Chest bone based on the user's torso "up" direction
+    // (mid-shoulders − mid-hips). Head remains independent (world rotation).
+    private struct TorsoState
+    {
+        public Transform Bone;
+        public Quaternion BindRot;
+        public Vector3 BindUpWorld;   // torso up in T-pose (world)
+        public Quaternion Smooth;
+    }
+
+    [Header("Torso")]
+    [Range(0f, 45f)]
+    [Tooltip("Max degrees the spine/chest can tilt from bind pose.")]
+    public float torsoMaxAngle = 30f;
+    [Range(1f, 20f)]
+    public float torsoSmoothSpeed = 10f;
+
+    [Header("Hand (wrist)")]
+    [Range(0f, 45f)]
+    [Tooltip("Max degrees the hand bone can rotate from bind pose.")]
+    public float handMaxAngle = 30f;
+
+    // ── Foot state ──
+    // Foot rotation is swing-only from ankle→footIndex direction.
+    // In 2D this is limited but helps shoes not look stuck at a fixed angle.
+    private struct FootState
+    {
+        public Transform Bone;
+        public Quaternion BindRot;
+        public Vector3 BindAimWorld;  // ankle→foot direction in T-pose (world)
+        public Quaternion Smooth;
+    }
+
+    [Header("Foot")]
+    [Range(0f, 30f)]
+    [Tooltip("Max degrees the foot bone can rotate from bind pose.")]
+    public float footMaxAngle = 20f;
 
     private void Awake() => _animator = GetComponent<Animator>();
 
@@ -88,6 +130,17 @@ public class PoseToCharacter : MonoBehaviour
         // Third bone is the "end" (hand for arms, foot for legs) used only to compute lower limb direction.
         _leftLeg  = BuildArm(HumanBodyBones.LeftUpperLeg,  HumanBodyBones.LeftLowerLeg,  HumanBodyBones.LeftFoot);
         _rightLeg = BuildArm(HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot);
+
+        // Foot bones — rotated by ankle→footIndex swing (swing-only, no bend plane).
+        _leftFoot  = BuildFoot(HumanBodyBones.LeftFoot,  HumanBodyBones.LeftToes);
+        _rightFoot = BuildFoot(HumanBodyBones.RightFoot, HumanBodyBones.RightToes);
+
+        // Hand bones — rotated by wrist→index swing; reuse FootState (same single-swing pattern).
+        _leftHand  = BuildSingleSwingBone(HumanBodyBones.LeftHand,  HumanBodyBones.LeftMiddleProximal);
+        _rightHand = BuildSingleSwingBone(HumanBodyBones.RightHand, HumanBodyBones.RightMiddleProximal);
+
+        // Torso — rotate Spine/Chest with player's torso "up" direction.
+        _torso = BuildTorso();
 
         if (_left.Upper == null || _right.Upper == null)
         {
@@ -173,6 +226,11 @@ public class PoseToCharacter : MonoBehaviour
                      poseManager.RightKneeVisibility  >= visibilityThreshold &&
                      poseManager.RightAnkleVisibility >= visibilityThreshold;
 
+        bool torsoVis = poseManager.LeftShoulderVisibility  >= visibilityThreshold &&
+                        poseManager.RightShoulderVisibility >= visibilityThreshold &&
+                        poseManager.LeftHipVisibility        >= visibilityThreshold &&
+                        poseManager.RightHipVisibility       >= visibilityThreshold;
+
         // ── Debug every ~1.5s ──
         _logCounter++;
         if (_logCounter % 90 == 0)
@@ -188,31 +246,51 @@ public class PoseToCharacter : MonoBehaviour
         if (lVis)
         {
             SolveArm(ref _left,
-                Lm(poseManager.LeftShoulder), Lm(poseManager.LeftElbow), Lm(poseManager.LeftWrist),
+                poseManager.LeftShoulder, poseManager.LeftElbow, poseManager.LeftWrist,
                 armBlend);
         }
 
         if (rVis)
         {
             SolveArm(ref _right,
-                Lm(poseManager.RightShoulder), Lm(poseManager.RightElbow), Lm(poseManager.RightWrist),
+                poseManager.RightShoulder, poseManager.RightElbow, poseManager.RightWrist,
                 armBlend);
         }
 
-        // ── Legs (hip → knee → ankle) ──
-        // Reuses the same swing-twist solver; legs follow the same math as arms.
+        // ── Legs (hip → knee → ankle) + foot ──
         if (llVis)
         {
-            SolveArm(ref _leftLeg,
-                Lm(poseManager.LeftHip), Lm(poseManager.LeftKnee), Lm(poseManager.LeftAnkle),
+            SolveLeg(ref _leftLeg,
+                poseManager.LeftHip, poseManager.LeftKnee, poseManager.LeftAnkle,
+                poseManager.LeftFootIndex, poseManager.LeftFootIndexVisibility,
                 armBlend);
         }
 
         if (rlVis)
         {
-            SolveArm(ref _rightLeg,
-                Lm(poseManager.RightHip), Lm(poseManager.RightKnee), Lm(poseManager.RightAnkle),
+            SolveLeg(ref _rightLeg,
+                poseManager.RightHip, poseManager.RightKnee, poseManager.RightAnkle,
+                poseManager.RightFootIndex, poseManager.RightFootIndexVisibility,
                 armBlend);
+        }
+
+        // ── Torso (Spine/Chest rotation) ──
+        if (torsoVis)
+        {
+            float torsoBlend = 1f - Mathf.Exp(-torsoSmoothSpeed * Time.deltaTime);
+            SolveTorso(torsoBlend);
+        }
+
+        // ── Hands (wrist→index swing) ──
+        if (poseManager.LeftWristVisibility >= visibilityThreshold &&
+            poseManager.LeftIndexVisibility >= visibilityThreshold)
+        {
+            SolveHand(ref _leftHand, poseManager.LeftWrist, poseManager.LeftIndex, armBlend);
+        }
+        if (poseManager.RightWristVisibility >= visibilityThreshold &&
+            poseManager.RightIndexVisibility >= visibilityThreshold)
+        {
+            SolveHand(ref _rightHand, poseManager.RightWrist, poseManager.RightIndex, armBlend);
         }
 
         // ── Head ──
@@ -223,46 +301,215 @@ public class PoseToCharacter : MonoBehaviour
     }
 
     // ═══════════════════════════════════════════
-    //  ARM SOLVER
+    //  LIMB SOLVERS
     // ═══════════════════════════════════════════
 
-    private void SolveArm(ref ArmState arm, Vector3 shoulder, Vector3 elbow, Vector3 wrist, float blend)
+    /// <summary>Arm solver — thin wrapper over SolveLimb with MediaPipe shoulder/elbow/wrist landmarks.</summary>
+    private void SolveArm(ref ArmState arm, Vector3 shoulderLm, Vector3 elbowLm, Vector3 wristLm, float blend)
     {
-        Vector3 upperDir = elbow - shoulder;
-        Vector3 lowerDir = wrist - elbow;
+        SolveLimb(ref arm, Lm(shoulderLm), Lm(elbowLm), Lm(wristLm), blend);
+    }
+
+    /// <summary>
+    /// Leg solver — thin wrapper over SolveLimb with hip/knee/ankle landmarks,
+    /// plus optional foot bone rotation from ankle→footIndex direction.
+    /// </summary>
+    private void SolveLeg(ref ArmState leg,
+        Vector3 hipLm, Vector3 kneeLm, Vector3 ankleLm,
+        Vector3 footIndexLm, float footIndexVisibility,
+        float blend)
+    {
+        SolveLimb(ref leg, Lm(hipLm), Lm(kneeLm), Lm(ankleLm), blend);
+
+        // Optionally rotate the foot bone (ankle→footIndex direction)
+        bool isLeft = (leg.Upper == _leftLeg.Upper);
+        FootState foot = isLeft ? _leftFoot : _rightFoot;
+        if (foot.Bone != null && footIndexVisibility >= visibilityThreshold)
+        {
+            SolveFoot(ref foot, ankleLm, footIndexLm, blend);
+            if (isLeft) _leftFoot = foot; else _rightFoot = foot;
+        }
+    }
+
+    /// <summary>
+    /// Generic limb solver (upper bone + lower bone) using swing-twist with bend plane.
+    /// Used by both SolveArm and SolveLeg — the math is the same for any 2-bone limb.
+    /// </summary>
+    private void SolveLimb(ref ArmState limb, Vector3 upperPos, Vector3 midPos, Vector3 lowerPos, float blend)
+    {
+        Vector3 upperDir = midPos - upperPos;
+        Vector3 lowerDir = lowerPos - midPos;
         if (!Norm(ref upperDir) || !Norm(ref lowerDir)) return;
 
-        // Bend plane from arm triangle
+        // Bend plane from limb triangle
         Vector3 bendLocal = Vector3.Cross(upperDir, lowerDir);
         if (bendLocal.sqrMagnitude < 0.001f)
         {
-            bendLocal = arm.LastBendLocal;
+            bendLocal = limb.LastBendLocal;
         }
         else
         {
             bendLocal.Normalize();
-            if (Vector3.Dot(bendLocal, arm.LastBendLocal) < 0f)
+            if (Vector3.Dot(bendLocal, limb.LastBendLocal) < 0f)
                 bendLocal = -bendLocal;
         }
-        arm.LastBendLocal = bendLocal;
+        limb.LastBendLocal = bendLocal;
 
         Vector3 upperWorld = transform.TransformDirection(upperDir);
         Vector3 lowerWorld = transform.TransformDirection(lowerDir);
         Vector3 bendWorld  = transform.TransformDirection(bendLocal);
 
-        if (arm.Upper != null)
+        if (limb.Upper != null)
         {
-            Quaternion target = SwingTwist(arm.UpperBindAim, upperWorld, arm.BindBendNormal, bendWorld, arm.UpperBindRot);
-            arm.UpperSmooth = Quaternion.Slerp(arm.UpperSmooth, target, blend);
-            arm.Upper.rotation = arm.UpperSmooth;
+            Quaternion target = SwingTwist(limb.UpperBindAim, upperWorld, limb.BindBendNormal, bendWorld, limb.UpperBindRot);
+            limb.UpperSmooth = Quaternion.Slerp(limb.UpperSmooth, target, blend);
+            limb.Upper.rotation = limb.UpperSmooth;
         }
 
-        if (arm.Lower != null)
+        if (limb.Lower != null)
         {
-            Quaternion target = SwingTwist(arm.LowerBindAim, lowerWorld, arm.BindBendNormal, bendWorld, arm.LowerBindRot);
-            arm.LowerSmooth = Quaternion.Slerp(arm.LowerSmooth, target, blend);
-            arm.Lower.rotation = arm.LowerSmooth;
+            Quaternion target = SwingTwist(limb.LowerBindAim, lowerWorld, limb.BindBendNormal, bendWorld, limb.LowerBindRot);
+            limb.LowerSmooth = Quaternion.Slerp(limb.LowerSmooth, target, blend);
+            limb.Lower.rotation = limb.LowerSmooth;
         }
+    }
+
+    /// <summary>
+    /// Foot bone swing from ankle→footIndex direction.
+    /// Swing-only (no bend plane) since the foot hinge is a single rotation.
+    /// Clamped to footMaxAngle to prevent large noisy rotations in 2D data.
+    /// </summary>
+    private void SolveFoot(ref FootState foot, Vector3 ankleLm, Vector3 footIndexLm, float blend)
+    {
+        Vector3 footDir = Lm(footIndexLm) - Lm(ankleLm);
+        if (!Norm(ref footDir)) return;
+
+        Vector3 footDirWorld = transform.TransformDirection(footDir);
+        Quaternion swing = Quaternion.FromToRotation(foot.BindAimWorld, footDirWorld);
+
+        float angle = Quaternion.Angle(Quaternion.identity, swing);
+        if (angle > footMaxAngle)
+        {
+            swing = Quaternion.Slerp(Quaternion.identity, swing, footMaxAngle / angle);
+        }
+
+        Quaternion target = swing * foot.BindRot;
+        foot.Smooth = Quaternion.Slerp(foot.Smooth, target, blend * 0.7f); // slightly slower for stability
+        foot.Bone.rotation = foot.Smooth;
+    }
+
+    /// <summary>Build a FootState from ankle and toes bones.</summary>
+    private FootState BuildFoot(HumanBodyBones footBone, HumanBodyBones toesBone)
+    {
+        Transform f = _animator.GetBoneTransform(footBone);
+        Transform t = _animator.GetBoneTransform(toesBone);
+        if (f == null) return default;
+        if (t == null && f.childCount > 0) t = f.GetChild(0);
+        if (t == null) return default;
+
+        Vector3 aim = (t.position - f.position).normalized;
+        return new FootState
+        {
+            Bone = f,
+            BindRot = f.rotation,
+            BindAimWorld = aim,
+            Smooth = f.rotation
+        };
+    }
+
+    /// <summary>Build a single-swing bone state from a bone and its child (e.g. wrist → middle finger).</summary>
+    private FootState BuildSingleSwingBone(HumanBodyBones bone, HumanBodyBones endBone)
+    {
+        Transform b = _animator.GetBoneTransform(bone);
+        Transform e = _animator.GetBoneTransform(endBone);
+        if (b == null) return default;
+        if (e == null && b.childCount > 0) e = b.GetChild(0);
+        if (e == null) return default;
+
+        Vector3 aim = (e.position - b.position).normalized;
+        return new FootState
+        {
+            Bone = b,
+            BindRot = b.rotation,
+            BindAimWorld = aim,
+            Smooth = b.rotation
+        };
+    }
+
+    /// <summary>Build torso state by finding the best available torso bone (UpperChest → Chest → Spine).</summary>
+    private TorsoState BuildTorso()
+    {
+        // Unity objects use special null semantics — explicit check instead of ?? chain.
+        Transform bone = _animator.GetBoneTransform(HumanBodyBones.UpperChest);
+        if (bone == null) bone = _animator.GetBoneTransform(HumanBodyBones.Chest);
+        if (bone == null) bone = _animator.GetBoneTransform(HumanBodyBones.Spine);
+        if (bone == null) return default;
+
+        Transform hips = _animator.GetBoneTransform(HumanBodyBones.Hips);
+        Vector3 up = hips != null
+            ? (bone.position - hips.position).normalized
+            : Vector3.up;
+
+        return new TorsoState
+        {
+            Bone = bone,
+            BindRot = bone.rotation,
+            BindUpWorld = up,
+            Smooth = bone.rotation
+        };
+    }
+
+    // ═══════════════════════════════════════════
+    //  TORSO + HAND SOLVERS
+    // ═══════════════════════════════════════════
+
+    /// <summary>
+    /// Rotates the spine/chest based on the user's torso "up" direction
+    /// (mid-shoulders − mid-hips). Clamped swing, world rotation so the
+    /// independently-rotated head isn't dragged along.
+    /// </summary>
+    private void SolveTorso(float blend)
+    {
+        if (_torso.Bone == null) return;
+
+        Vector3 midShoulder = 0.5f * (LmRaw(poseManager.LeftShoulder) + LmRaw(poseManager.RightShoulder));
+        Vector3 midHip      = 0.5f * (LmRaw(poseManager.LeftHip)      + LmRaw(poseManager.RightHip));
+        Vector3 torsoUp = midShoulder - midHip;
+        if (!Norm(ref torsoUp)) return;
+
+        Vector3 torsoUpWorld = transform.TransformDirection(torsoUp);
+        Quaternion swing = Quaternion.FromToRotation(_torso.BindUpWorld, torsoUpWorld);
+
+        float angle = Quaternion.Angle(Quaternion.identity, swing);
+        if (angle > torsoMaxAngle)
+            swing = Quaternion.Slerp(Quaternion.identity, swing, torsoMaxAngle / angle);
+
+        Quaternion target = swing * _torso.BindRot;
+        _torso.Smooth = Quaternion.Slerp(_torso.Smooth, target, blend);
+        _torso.Bone.rotation = _torso.Smooth;
+    }
+
+    /// <summary>
+    /// Rotates a hand bone based on wrist→index direction (clamped swing).
+    /// Mirrored landmarks used (same as arms) so hand direction matches the arm.
+    /// </summary>
+    private void SolveHand(ref FootState hand, Vector3 wristLm, Vector3 indexLm, float blend)
+    {
+        if (hand.Bone == null) return;
+
+        Vector3 handDir = Lm(indexLm) - Lm(wristLm);
+        if (!Norm(ref handDir)) return;
+
+        Vector3 handDirWorld = transform.TransformDirection(handDir);
+        Quaternion swing = Quaternion.FromToRotation(hand.BindAimWorld, handDirWorld);
+
+        float angle = Quaternion.Angle(Quaternion.identity, swing);
+        if (angle > handMaxAngle)
+            swing = Quaternion.Slerp(Quaternion.identity, swing, handMaxAngle / angle);
+
+        Quaternion target = swing * hand.BindRot;
+        hand.Smooth = Quaternion.Slerp(hand.Smooth, target, blend * 0.7f); // slightly slower for stability
+        hand.Bone.rotation = hand.Smooth;
     }
 
     private static Quaternion SwingTwist(

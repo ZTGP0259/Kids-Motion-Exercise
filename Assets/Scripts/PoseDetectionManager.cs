@@ -18,12 +18,16 @@ public class PoseDetectionManager : MonoBehaviour
     private const int RIGHT_ELBOW    = 14;
     private const int LEFT_WRIST     = 15;
     private const int RIGHT_WRIST    = 16;
+    private const int LEFT_INDEX     = 19;
+    private const int RIGHT_INDEX    = 20;
     private const int LEFT_HIP       = 23;
     private const int RIGHT_HIP      = 24;
     private const int LEFT_KNEE      = 25;
     private const int RIGHT_KNEE     = 26;
     private const int LEFT_ANKLE     = 27;
     private const int RIGHT_ANKLE    = 28;
+    private const int LEFT_FOOT_INDEX  = 31;
+    private const int RIGHT_FOOT_INDEX = 32;
 
     // Public landmark properties (normalized x/y plus MediaPipe relative z depth)
     public Vector3 Nose           { get; private set; }
@@ -33,12 +37,16 @@ public class PoseDetectionManager : MonoBehaviour
     public Vector3 RightElbow     { get; private set; }
     public Vector3 LeftWrist      { get; private set; }
     public Vector3 RightWrist     { get; private set; }
+    public Vector3 LeftIndex      { get; private set; }
+    public Vector3 RightIndex     { get; private set; }
     public Vector3 LeftHip        { get; private set; }
     public Vector3 RightHip       { get; private set; }
     public Vector3 LeftKnee       { get; private set; }
     public Vector3 RightKnee      { get; private set; }
     public Vector3 LeftAnkle      { get; private set; }
     public Vector3 RightAnkle     { get; private set; }
+    public Vector3 LeftFootIndex  { get; private set; }
+    public Vector3 RightFootIndex { get; private set; }
 
     // Visibility is tracked separately from depth so downstream solvers can use true 3D coordinates.
     public float NoseVisibility           { get; private set; }
@@ -48,12 +56,16 @@ public class PoseDetectionManager : MonoBehaviour
     public float RightElbowVisibility     { get; private set; }
     public float LeftWristVisibility      { get; private set; }
     public float RightWristVisibility     { get; private set; }
+    public float LeftIndexVisibility      { get; private set; }
+    public float RightIndexVisibility     { get; private set; }
     public float LeftHipVisibility        { get; private set; }
     public float RightHipVisibility       { get; private set; }
     public float LeftKneeVisibility       { get; private set; }
     public float RightKneeVisibility      { get; private set; }
     public float LeftAnkleVisibility      { get; private set; }
     public float RightAnkleVisibility     { get; private set; }
+    public float LeftFootIndexVisibility  { get; private set; }
+    public float RightFootIndexVisibility { get; private set; }
 
     // Expose camera texture so other scripts (e.g. CalibrationManager) can display it
     public WebCamTexture CameraTexture => _webcamTexture;
@@ -221,12 +233,16 @@ public class PoseDetectionManager : MonoBehaviour
             RightElbow    = CorrectRotation(ToVector3(landmarks, RIGHT_ELBOW), rotAngle);
             LeftWrist     = CorrectRotation(ToVector3(landmarks, LEFT_WRIST), rotAngle);
             RightWrist    = CorrectRotation(ToVector3(landmarks, RIGHT_WRIST), rotAngle);
+            LeftIndex     = CorrectRotation(ToVector3(landmarks, LEFT_INDEX), rotAngle);
+            RightIndex    = CorrectRotation(ToVector3(landmarks, RIGHT_INDEX), rotAngle);
             LeftHip       = CorrectRotation(ToVector3(landmarks, LEFT_HIP), rotAngle);
             RightHip      = CorrectRotation(ToVector3(landmarks, RIGHT_HIP), rotAngle);
             LeftKnee      = CorrectRotation(ToVector3(landmarks, LEFT_KNEE), rotAngle);
             RightKnee     = CorrectRotation(ToVector3(landmarks, RIGHT_KNEE), rotAngle);
             LeftAnkle     = CorrectRotation(ToVector3(landmarks, LEFT_ANKLE), rotAngle);
             RightAnkle    = CorrectRotation(ToVector3(landmarks, RIGHT_ANKLE), rotAngle);
+            LeftFootIndex  = CorrectRotation(ToVector3(landmarks, LEFT_FOOT_INDEX),  rotAngle);
+            RightFootIndex = CorrectRotation(ToVector3(landmarks, RIGHT_FOOT_INDEX), rotAngle);
 
             NoseVisibility          = GetVisibility(landmarks, NOSE);
             LeftShoulderVisibility  = GetVisibility(landmarks, LEFT_SHOULDER);
@@ -235,12 +251,16 @@ public class PoseDetectionManager : MonoBehaviour
             RightElbowVisibility    = GetVisibility(landmarks, RIGHT_ELBOW);
             LeftWristVisibility     = GetVisibility(landmarks, LEFT_WRIST);
             RightWristVisibility    = GetVisibility(landmarks, RIGHT_WRIST);
+            LeftIndexVisibility     = GetVisibility(landmarks, LEFT_INDEX);
+            RightIndexVisibility    = GetVisibility(landmarks, RIGHT_INDEX);
             LeftHipVisibility       = GetVisibility(landmarks, LEFT_HIP);
             RightHipVisibility      = GetVisibility(landmarks, RIGHT_HIP);
             LeftKneeVisibility      = GetVisibility(landmarks, LEFT_KNEE);
             RightKneeVisibility     = GetVisibility(landmarks, RIGHT_KNEE);
             LeftAnkleVisibility     = GetVisibility(landmarks, LEFT_ANKLE);
             RightAnkleVisibility    = GetVisibility(landmarks, RIGHT_ANKLE);
+            LeftFootIndexVisibility  = GetVisibility(landmarks, LEFT_FOOT_INDEX);
+            RightFootIndexVisibility = GetVisibility(landmarks, RIGHT_FOOT_INDEX);
 
             _frameCount++;
             if (_frameCount % 60 == 0)

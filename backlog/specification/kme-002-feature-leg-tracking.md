@@ -6,7 +6,7 @@
 - **Status**: specification
 - **Complexity**: MEDIUM
 - **Created**: 2026-04-17
-- **Quality Gates**: all-approved
+- **Quality Gates**: all-approved (scope expansion 2026-04-17 re-approved)
 
 ---
 
@@ -50,10 +50,10 @@ When the player moves their legs (marches, kicks, bends a knee), the character's
 
 | File | Action | Description |
 |------|--------|-------------|
-| `Assets/Scripts/PoseDetectionManager.cs` | modify | Add `LEFT_KNEE=25`, `RIGHT_KNEE=26` constants. Add public `LeftKnee`, `RightKnee` (Vector3) and `LeftKneeVisibility`, `RightKneeVisibility` (float). Populate in Update loop with rotation correction. Ankles are already exposed from kme-001. |
-| `Assets/Scripts/PoseToCharacter.cs` | modify | Build `_leftLeg` and `_rightLeg` as `ArmState` instances (struct is generic enough for any upper/lower limb pair). Use `LeftUpperLeg`/`LeftLowerLeg`/`LeftFoot` bones from Humanoid avatar. LateUpdate drives them using the same `SolveArm` function. Pass `kLeftLegBendNormal = Vector3.right` (character's right = knee bends forward fallback) for left leg, and same for right leg (knees bend the same direction on both legs — unlike elbows). |
-| `Assets/Scripts/CalibrationManager.cs` | modify | Expand the `headOk && leftOk && rightOk` gate: require `LeftHipVisibility`, `RightHipVisibility`, `LeftAnkleVisibility`, `RightAnkleVisibility` all ≥ `visibilityThreshold`. Update instruction text to "Stand straight, show both hands AND your legs to the camera". |
-| `Assets/Scenes/GameScene.unity` | modify | Character prefab Y position: raise from 0 → 0.9 (approx half-height for this Mixamo character model so feet sit on ground). |
+| `Assets/Scripts/PoseDetectionManager.cs` | modify _(done)_ | Knee landmarks (25/26) + visibility. **SCOPE ADD**: `LEFT_FOOT_INDEX=31`, `RIGHT_FOOT_INDEX=32` for foot tip direction. |
+| `Assets/Scripts/PoseToCharacter.cs` | modify _(partial)_ | Existing: `_leftLeg`/`_rightLeg` solve via `SolveArm`. **SCOPE ADD**: (a) rename `SolveArm` → `SolveLimb` internally + add `SolveArm`/`SolveLeg` wrappers for clarity. (b) Drive `LeftFoot`/`RightFoot` bones with a lightweight ankle→footIndex swing. |
+| `Assets/Scripts/CalibrationManager.cs` | modify _(done)_ | Legs visibility added to 3-sec hold gate. |
+| `Assets/Scenes/GameScene.unity` | modify _(done, may re-tune)_ | Character Y = 0.9. If Scene view looks "floating" but runtime is OK, leave it. If runtime is also wrong, re-tune to value that puts feet on ground plane exactly. |
 
 ### Implementation Notes
 
@@ -232,6 +232,50 @@ The BuildArm function uses the "hand" bone (end of chain) to derive the lower li
 | 6 | LOW | If a user's clothing hides their ankles (e.g. long pants + dim lighting), MediaPipe visibility stays low → calibration stuck | Edge Case #8 | Documented; same workaround as above. |
 
 **Verdict**: Approved — no new edge cases added (all predicted risks already covered). All Gate 1 & 2 HIGH/CRITICAL findings resolved. Spec is implementation-ready.
+
+---
+
+## Scope Expansion 2026-04-17 (re-run gates)
+
+### Additional deliverables
+- Rename internal `SolveArm` → `SolveLimb`; add thin `SolveArm` + `SolveLeg` method wrappers for code clarity (no behavior change)
+- Add `LEFT_FOOT_INDEX=31`, `RIGHT_FOOT_INDEX=32` landmarks in `PoseDetectionManager`
+- Add foot bone rotation: swing from ankle→footIndex direction so shoes don't visibly twist
+- Verify character Y=0.9 places feet on ground in play mode (no code change unless visual bug at runtime)
+
+### Gate 1 — Senior Dev (scope re-run)
+**Date**: 2026-04-17 | **Status**: Approved
+
+| # | Severity | Finding | Resolution |
+|---|----------|---------|------------|
+| 1 | LOW | `SolveLimb` rename churns public/internal contract? | Only `SolveArm` is private static; rename is purely internal — no external callers. Safe. |
+| 2 | LOW | Foot swing uses only ankle→footIndex in 2D → will be noisy (foot direction in 2D is poorly observed from front camera) | Apply swing only when `FootIndexVisibility ≥ threshold`; also clamp max angle (30°) to prevent large twists; heavy smoothing. Documented limitation. |
+
+**Verdict**: Approved.
+
+### Gate 2 — Perf / Safety (scope re-run)
+**Date**: 2026-04-17 | **Status**: Approved
+
+| # | Severity | Category | Finding | Mitigation |
+|---|----------|----------|---------|------------|
+| 1 | LOW | Perf | Two additional swing calls per frame (left + right foot) | O(1) each, no allocations. Negligible. |
+| 2 | LOW | Safety | Foot bone may be null on non-humanoid / partial rigs | Guard: skip if `_leftFootBone == null`. |
+
+**Verdict**: Approved.
+
+### Gate 3 — Pre-dev sweep (scope re-run)
+**Date**: 2026-04-17 | **Status**: Approved
+
+**Part A**: All Gate 1/2 findings resolved in updated spec.
+
+**Part B — Predicted bugs:**
+
+| # | Severity | Predicted Bug | Action |
+|---|----------|--------------|--------|
+| 1 | MEDIUM | Foot swing jitter: MediaPipe footIndex is often noisy (occluded by shoe, low confidence). Applying swing blindly will cause visible foot wobble. | Per-frame visibility gate + clamped-angle swing + heavy smoothing. Only rotate foot if `FootIndexVisibility ≥ 0.5`. |
+| 2 | LOW | User's character uses specific Mixamo rig — if `LeftFoot`/`RightFoot` aren't exposed, Animator.GetBoneTransform returns null | Null guard; skip foot solving silently. |
+
+**Verdict**: Approved — safe additions. Proceeding with implementation.
 
 ---
 

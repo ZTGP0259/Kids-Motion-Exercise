@@ -1,17 +1,18 @@
 using UnityEngine;
 
 /// <summary>
-/// Mirrors the user's jump directly onto the character's vertical position.
-/// No animation clip needed — the character's transform Y follows the user's
-/// hip Y displacement in real time.
+/// Mirrors the user's hip vertical motion directly onto the character.
+/// Handles BOTH jumps (positive offset) AND squats (negative offset) —
+/// so when the user squats, the character's hips lower and feet stay grounded.
 ///
 /// ALGORITHM:
 ///   1. At Start: capture `_basePosition = transform.position`.
 ///   2. Each LateUpdate:
 ///      - Smooth the averaged hip Y (input smoothing).
-///      - Compute hipDelta = BaselineHipY - smoothedHipY  (positive = user jumped UP).
-///      - Deadzone + clamp (>= 0) so crouches don't push character down.
-///      - Target offset = hipDelta * jumpHeightScale.
+///      - Compute hipDelta = BaselineHipY - smoothedHipY  (positive = UP, negative = DOWN/squat).
+///      - Symmetric deadzone removes jitter in both directions.
+///      - Target offset = hipDelta * jumpHeightScale (can be negative).
+///      - Clamp target so character root stays above ground (basePos.y + offset >= minGroundClearance).
 ///      - Smooth offset toward target (output smoothing) — prevents snaps.
 ///      - Apply: transform.position = _basePosition + up * offset.
 ///
@@ -50,6 +51,10 @@ public class JumpDetector : MonoBehaviour
     [Range(0.1f, 0.9f)]
     [Tooltip("Minimum hip visibility. Both hips must pass; otherwise character eases back to ground.")]
     public float visibilityThreshold = 0.4f;
+
+    [Range(0f, 0.5f)]
+    [Tooltip("Character root stays at least this high above world Y=0 (prevents sinking through ground).")]
+    public float minGroundClearance = 0.05f;
 
     private Vector3 _basePosition;
     private float _smoothedHipY;
@@ -110,13 +115,25 @@ public class JumpDetector : MonoBehaviour
         float inBlend = 1f - Mathf.Exp(-hipSmoothSpeed * dt);
         _smoothedHipY = Mathf.Lerp(_smoothedHipY, rawHipY, inBlend);
 
-        // Positive when user jumped UP (MediaPipe Y=0 is top)
+        // Positive when user jumped UP, negative when user squatted DOWN
+        // (MediaPipe Y=0 is top, so jumping DECREASES hipY and squatting INCREASES it)
         float hipDelta = CalibrationManager.BaselineHipY - _smoothedHipY;
 
-        // Remove deadzone; clamp negative (crouch) to 0
-        float adjusted = Mathf.Max(0f, hipDelta - deadzone);
+        // Symmetric deadzone: remove jitter in both directions
+        float adjusted;
+        if (Mathf.Abs(hipDelta) <= deadzone)
+            adjusted = 0f;
+        else
+            adjusted = hipDelta - Mathf.Sign(hipDelta) * deadzone;
 
         _targetYOffset = adjusted * jumpHeightScale;
+
+        // Clamp so character root stays above ground:
+        //   basePosition.y + targetYOffset >= minGroundClearance
+        //   → targetYOffset >= minGroundClearance - basePosition.y
+        float minOffset = minGroundClearance - _basePosition.y;
+        if (_targetYOffset < minOffset) _targetYOffset = minOffset;
+
         EaseAndApply(dt);
     }
 

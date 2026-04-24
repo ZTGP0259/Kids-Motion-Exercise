@@ -7,6 +7,7 @@ Project Key: `kme`
 |----|------|-------|--------|------------|---------|
 | kme-001 | feature | Jump detection using MediaPipe Pose | specification | MEDIUM | 2026-04-17 |
 | kme-002 | feature | Full-body replication via leg tracking | specification | MEDIUM | 2026-04-17 |
+| kme-003 | feature | Torso tracking + squat Y-offset + wrist orientation | specification | MEDIUM | 2026-04-17 |
 
 ---
 
@@ -30,3 +31,8 @@ Project Key: `kme`
 | 2026-04-17 19:45 | kme-002 | Gourav Patidar | Gate 1 approved — ArmState reuse documented; no HIGH/CRITICAL component sync issues |
 | 2026-04-17 19:48 | kme-002 | Gourav Patidar | Gate 2 approved — no allocations; existing null guards sufficient |
 | 2026-04-17 19:50 | kme-002 | Gourav Patidar | Gate 3 approved — all Gate 1/2 findings resolved; predicted bugs covered by existing edge cases; moved to specification/ |
+| 2026-04-17 20:15 | kme-002 | Gourav Patidar | Scope expansion: SolveLeg refactor + foot bone rotation (ankle→footIndex) + landmark 31/32; all 3 gates re-run approved |
+| 2026-04-17 21:00 | kme-003 | Gourav Patidar | Created task — specification complete; torso + wrist + squat Y |
+| 2026-04-17 21:05 | kme-003 | Gourav Patidar | Gate 1 approved — head-tilt risk mitigated by world-rotation ordering |
+| 2026-04-17 21:08 | kme-003 | Gourav Patidar | Gate 2 approved — O(1) per-frame writes; null guards present |
+| 2026-04-17 21:12 | kme-003 | Gourav Patidar | Gate 3 approved — limitations documented; moved to specification/ |
