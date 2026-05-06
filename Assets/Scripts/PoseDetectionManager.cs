@@ -10,6 +10,17 @@ public class PoseDetectionManager : MonoBehaviour
     [Header("UI")]
     public RawImage cameraDisplay;
 
+    [Header("Landmark Smoothing")]
+    public bool smoothLandmarks = true;
+    [Range(1f, 30f)]
+    public float landmarkSmoothSpeed = 12f;
+    [Range(1f, 30f)]
+    public float visibilitySmoothSpeed = 18f;
+    [Range(0.1f, 0.9f)]
+    public float minVisibilityForPositionUpdate = 0.35f;
+    [Range(0f, 0.3f)]
+    public float lostTrackingHoldSeconds = 0.12f;
+
     // Landmark indices
     private const int NOSE           = 0;
     private const int LEFT_SHOULDER  = 11;
@@ -52,6 +63,15 @@ public class PoseDetectionManager : MonoBehaviour
     private Texture2D _inputTexture;
     private int _frameCount;
     private bool _isReady;
+    private readonly LandmarkState[] _landmarkStates = new LandmarkState[33];
+
+    private struct LandmarkState
+    {
+        public bool HasValue;
+        public Vector3 Position;
+        public float Visibility;
+        public float LastSeenTime;
+    }
 
     private void Awake()
     {
@@ -202,25 +222,25 @@ public class PoseDetectionManager : MonoBehaviour
             // videoRotationAngle = degrees CW to rotate raw image for correct display.
             int rotAngle = _webcamTexture.videoRotationAngle;
 
-            Nose          = CorrectRotation(ToVector3(landmarks, NOSE), rotAngle);
-            LeftShoulder  = CorrectRotation(ToVector3(landmarks, LEFT_SHOULDER), rotAngle);
-            RightShoulder = CorrectRotation(ToVector3(landmarks, RIGHT_SHOULDER), rotAngle);
-            LeftElbow     = CorrectRotation(ToVector3(landmarks, LEFT_ELBOW), rotAngle);
-            RightElbow    = CorrectRotation(ToVector3(landmarks, RIGHT_ELBOW), rotAngle);
-            LeftWrist     = CorrectRotation(ToVector3(landmarks, LEFT_WRIST), rotAngle);
-            RightWrist    = CorrectRotation(ToVector3(landmarks, RIGHT_WRIST), rotAngle);
-            LeftHip       = CorrectRotation(ToVector3(landmarks, LEFT_HIP), rotAngle);
-            RightHip      = CorrectRotation(ToVector3(landmarks, RIGHT_HIP), rotAngle);
+            Nose          = GetStableLandmark(landmarks, NOSE, rotAngle, out float noseVis);
+            LeftShoulder  = GetStableLandmark(landmarks, LEFT_SHOULDER, rotAngle, out float leftShoulderVis);
+            RightShoulder = GetStableLandmark(landmarks, RIGHT_SHOULDER, rotAngle, out float rightShoulderVis);
+            LeftElbow     = GetStableLandmark(landmarks, LEFT_ELBOW, rotAngle, out float leftElbowVis);
+            RightElbow    = GetStableLandmark(landmarks, RIGHT_ELBOW, rotAngle, out float rightElbowVis);
+            LeftWrist     = GetStableLandmark(landmarks, LEFT_WRIST, rotAngle, out float leftWristVis);
+            RightWrist    = GetStableLandmark(landmarks, RIGHT_WRIST, rotAngle, out float rightWristVis);
+            LeftHip       = GetStableLandmark(landmarks, LEFT_HIP, rotAngle, out float leftHipVis);
+            RightHip      = GetStableLandmark(landmarks, RIGHT_HIP, rotAngle, out float rightHipVis);
 
-            NoseVisibility          = GetVisibility(landmarks, NOSE);
-            LeftShoulderVisibility  = GetVisibility(landmarks, LEFT_SHOULDER);
-            RightShoulderVisibility = GetVisibility(landmarks, RIGHT_SHOULDER);
-            LeftElbowVisibility     = GetVisibility(landmarks, LEFT_ELBOW);
-            RightElbowVisibility    = GetVisibility(landmarks, RIGHT_ELBOW);
-            LeftWristVisibility     = GetVisibility(landmarks, LEFT_WRIST);
-            RightWristVisibility    = GetVisibility(landmarks, RIGHT_WRIST);
-            LeftHipVisibility       = GetVisibility(landmarks, LEFT_HIP);
-            RightHipVisibility      = GetVisibility(landmarks, RIGHT_HIP);
+            NoseVisibility          = noseVis;
+            LeftShoulderVisibility  = leftShoulderVis;
+            RightShoulderVisibility = rightShoulderVis;
+            LeftElbowVisibility     = leftElbowVis;
+            RightElbowVisibility    = rightElbowVis;
+            LeftWristVisibility     = leftWristVis;
+            RightWristVisibility    = rightWristVis;
+            LeftHipVisibility       = leftHipVis;
+            RightHipVisibility      = rightHipVis;
 
             _frameCount++;
             if (_frameCount % 60 == 0)
@@ -230,6 +250,52 @@ public class PoseDetectionManager : MonoBehaviour
                 Debug.Log($"[Pose] L.Wrist={LeftWrist:F3} | R.Wrist={RightWrist:F3}");
             }
         }
+    }
+
+    private Vector3 GetStableLandmark(
+        System.Collections.Generic.IList<Mediapipe.Tasks.Components.Containers.NormalizedLandmark> landmarks,
+        int index,
+        int rotationAngle,
+        out float visibility)
+    {
+        Vector3 measured = CorrectRotation(ToVector3(landmarks, index), rotationAngle);
+        float measuredVisibility = GetVisibility(landmarks, index);
+
+        if (!smoothLandmarks || index >= _landmarkStates.Length)
+        {
+            visibility = measuredVisibility;
+            return measured;
+        }
+
+        ref LandmarkState state = ref _landmarkStates[index];
+        float now = Time.realtimeSinceStartup;
+        float positionBlend = 1f - Mathf.Exp(-landmarkSmoothSpeed * Time.deltaTime);
+        float visibilityBlend = 1f - Mathf.Exp(-visibilitySmoothSpeed * Time.deltaTime);
+
+        if (!state.HasValue)
+        {
+            state.HasValue = true;
+            state.Position = measured;
+            state.Visibility = measuredVisibility;
+            state.LastSeenTime = now;
+            visibility = measuredVisibility;
+            return measured;
+        }
+
+        state.Visibility = Mathf.Lerp(state.Visibility, measuredVisibility, visibilityBlend);
+
+        if (measuredVisibility >= minVisibilityForPositionUpdate)
+        {
+            state.Position = Vector3.Lerp(state.Position, measured, positionBlend);
+            state.LastSeenTime = now;
+        }
+        else if (now - state.LastSeenTime > lostTrackingHoldSeconds)
+        {
+            state.Position = Vector3.Lerp(state.Position, measured, positionBlend * 0.35f);
+        }
+
+        visibility = state.Visibility;
+        return state.Position;
     }
 
     /// <summary>
